@@ -66,7 +66,8 @@ class Logger:
                 super().__init__(*args, **kwargs)
 
             def do_GET(self):
-                if self.path == '/':
+                path = self.path.split('?', 1)[0].rstrip('/')
+                if path in ('', '/logs'):
                     self.send_response(200)
                     self.send_header('Content-type', 'text/html')
                     self.end_headers()
@@ -150,7 +151,7 @@ class Logger:
                 pass  # Suppress HTTP server logs
 
         def run_server():
-            server = HTTPServer(('127.0.0.1', port), LogHandler)
+            server = HTTPServer(('0.0.0.0', port), LogHandler)
             server.serve_forever()
 
         server_thread = threading.Thread(target=run_server, daemon=True)

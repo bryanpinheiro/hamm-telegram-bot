@@ -59,9 +59,15 @@ docker compose up -d
 ```
 
 Access points:
-- Grafana: http://localhost:3701 (admin/admin)
-- Prometheus: http://localhost:9091
+- Grafana: http://localhost:3701/grafana (admin/admin)
+- Prometheus (direct): http://localhost:9091
+- Prometheus (behind `/prometheus` prefix): http://localhost:9091/prometheus/
 - Bot metrics: http://localhost:7001/metrics
+- Bot logs: http://localhost:7002/logs
+
+Grafana and Prometheus are served under `/grafana` and `/prometheus` so the same
+URLs work locally and behind the reverse proxy. Set `METRICS_PUBLIC_URL` in `.env`
+to the public base URL when deploying.
 
 ## Oracle VM Deployment
 
@@ -161,9 +167,10 @@ The project uses GitHub Actions for automated deployment:
 Create `.env` file on the VM:
 
 ```bash
-BOT_TOKEN=your_telegram_bot_token
+API_TOKEN=your_telegram_bot_token
 GRAFANA_ADMIN_USER=admin
 GRAFANA_ADMIN_PASSWORD=secure_password
+METRICS_PUBLIC_URL=https://metrics.example.com
 ```
 
 ## Database
@@ -188,7 +195,7 @@ The bot exposes the following metrics:
 
 ### Grafana Setup
 
-1. Access Grafana at http://localhost:3701
+1. Access Grafana at http://localhost:3701/grafana
 2. Login with admin/admin (change password after first login)
 3. Add Prometheus data source: http://prometheus:9090
 4. Import or create dashboards to visualize metrics
@@ -210,10 +217,14 @@ Add an A record in your domain's DNS settings:
 ```bash
 sudo a2enmod proxy
 sudo a2enmod proxy_http
+sudo a2enmod proxy_wstunnel  # Grafana Live (websockets)
+sudo a2enmod rewrite
 sudo systemctl restart httpd
 ```
 
 #### 3. Configure Apache VirtualHost (HTTP)
+
+Set `METRICS_PUBLIC_URL=https://metrics.example.com` in the `.env` file on the VM first: Grafana and Prometheus need it to generate correct links and redirects when served under a sub-path.
 
 ```apache
 <VirtualHost *:80>
@@ -221,9 +232,20 @@ sudo systemctl restart httpd
 
     ProxyPreserveHost On
 
+    # Sub-paths must keep their trailing slash, otherwise the proxied app
+    # receives an empty path and returns 404
+    RedirectMatch ^/grafana$ /grafana/
+    RedirectMatch ^/prometheus$ /prometheus/
+
+    # Grafana Live uses websockets, which must be matched before the
+    # plain http ProxyPass below
+    RewriteEngine On
+    RewriteCond %{HTTP:Upgrade} =websocket [NC]
+    RewriteRule ^/grafana/(.*) ws://127.0.0.1:3701/grafana/$1 [P,L]
+
     # Grafana
-    ProxyPass /grafana/ http://127.0.0.1:3701/
-    ProxyPassReverse /grafana/ http://127.0.0.1:3701/
+    ProxyPass /grafana/ http://127.0.0.1:3701/grafana/
+    ProxyPassReverse /grafana/ http://127.0.0.1:3701/grafana/
 
     # Prometheus
     ProxyPass /prometheus/ http://127.0.0.1:9091/
@@ -234,9 +256,15 @@ sudo systemctl restart httpd
     ProxyPassReverse /bot-metrics http://127.0.0.1:7001/metrics
 
     # Bot logs
-    ProxyPass /logs http://127.0.0.1:7002/
-    ProxyPassReverse /logs http://127.0.0.1:7002/
+    ProxyPass /logs http://127.0.0.1:7002/logs
+    ProxyPassReverse /logs http://127.0.0.1:7002/logs
 </VirtualHost>
+```
+
+If SELinux is enforcing (default on Oracle Linux), Apache is not allowed to open outbound connections unless:
+
+```bash
+sudo setsebool -P httpd_can_network_connect 1
 ```
 
 Save to `/etc/httpd/conf.d/metrics.conf` and restart:
@@ -256,9 +284,18 @@ After running certbot, it will automatically create an HTTPS VirtualHost on port
 
     ProxyPreserveHost On
 
+    RedirectMatch ^/grafana$ /grafana/
+    RedirectMatch ^/prometheus$ /prometheus/
+
+    # Grafana Live uses websockets, which must be matched before the
+    # plain http ProxyPass below
+    RewriteEngine On
+    RewriteCond %{HTTP:Upgrade} =websocket [NC]
+    RewriteRule ^/grafana/(.*) ws://127.0.0.1:3701/grafana/$1 [P,L]
+
     # Grafana
-    ProxyPass /grafana/ http://127.0.0.1:3701/
-    ProxyPassReverse /grafana/ http://127.0.0.1:3701/
+    ProxyPass /grafana/ http://127.0.0.1:3701/grafana/
+    ProxyPassReverse /grafana/ http://127.0.0.1:3701/grafana/
 
     # Prometheus
     ProxyPass /prometheus/ http://127.0.0.1:9091/
@@ -269,8 +306,8 @@ After running certbot, it will automatically create an HTTPS VirtualHost on port
     ProxyPassReverse /bot-metrics http://127.0.0.1:7001/metrics
 
     # Bot logs
-    ProxyPass /logs http://127.0.0.1:7002/
-    ProxyPassReverse /logs http://127.0.0.1:7002/
+    ProxyPass /logs http://127.0.0.1:7002/logs
+    ProxyPassReverse /logs http://127.0.0.1:7002/logs
 </VirtualHost>
 ```
 
@@ -297,10 +334,70 @@ Certbot will automatically update your VirtualHost configuration to use HTTPS.
 #### 5. Verify Configuration
 
 Access your services:
-- `https://metrics.example.com/grafana` → Grafana dashboard
-- `https://metrics.example.com/prometheus` → Prometheus UI
+- `https://metrics.example.com/grafana/` → Grafana dashboard
+- `https://metrics.example.com/prometheus/` → Prometheus UI
 - `https://metrics.example.com/bot-metrics` → Raw bot metrics
-- `https://metrics.example.com/logs` → Bot logs (JSON format)
+- `https://metrics.example.com/logs` → Bot logs (HTML view)
+
+Check the upstreams directly on the VM before debugging the proxy:
+
+Use GET requests (`-I` sends HEAD, which Prometheus answers with 405):
+
+```bash
+curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' http://127.0.0.1:3701/grafana/  # Grafana
+curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' http://127.0.0.1:9091/          # Prometheus
+curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:7001/metrics                   # Bot metrics
+curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:7002/logs                      # Bot logs
+```
+
+If a curl fails, the problem is the container, not Apache: `docker compose ps` and `docker compose logs <service>`.
+
+#### Nginx alternative
+
+If you use nginx instead of Apache, put this in `/etc/nginx/conf.d/metrics.conf`:
+
+```nginx
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+server {
+    listen 443 ssl;
+    server_name metrics.example.com;
+
+    ssl_certificate     /etc/letsencrypt/live/metrics.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/metrics.example.com/privkey.pem;
+
+    location /grafana/ {
+        proxy_pass http://127.0.0.1:3701/grafana/;
+        # Grafana Live (websockets)
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /prometheus/ {
+        proxy_pass http://127.0.0.1:9091/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /bot-metrics {
+        proxy_pass http://127.0.0.1:7001/metrics;
+    }
+
+    location /logs {
+        proxy_pass http://127.0.0.1:7002/logs;
+    }
+}
+```
+
+With SELinux enforcing, also run `sudo setsebool -P httpd_can_network_connect 1`.
 
 ## Project Structure
 
