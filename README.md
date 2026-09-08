@@ -216,6 +216,8 @@ Add an A record in your domain's DNS settings:
 ```bash
 sudo a2enmod proxy
 sudo a2enmod proxy_http
+sudo a2enmod proxy_wstunnel  # Grafana Live (websockets)
+sudo a2enmod rewrite
 sudo systemctl restart httpd
 ```
 
@@ -233,6 +235,12 @@ Set `METRICS_PUBLIC_URL=https://metrics.example.com` in the `.env` file on the V
     # receives an empty path and returns 404
     RedirectMatch ^/grafana$ /grafana/
     RedirectMatch ^/prometheus$ /prometheus/
+
+    # Grafana Live uses websockets, which must be matched before the
+    # plain http ProxyPass below
+    RewriteEngine On
+    RewriteCond %{HTTP:Upgrade} =websocket [NC]
+    RewriteRule ^/grafana/(.*) ws://127.0.0.1:3701/grafana/$1 [P,L]
 
     # Grafana
     ProxyPass /grafana/ http://127.0.0.1:3701/grafana/
@@ -277,6 +285,12 @@ After running certbot, it will automatically create an HTTPS VirtualHost on port
 
     RedirectMatch ^/grafana$ /grafana/
     RedirectMatch ^/prometheus$ /prometheus/
+
+    # Grafana Live uses websockets, which must be matched before the
+    # plain http ProxyPass below
+    RewriteEngine On
+    RewriteCond %{HTTP:Upgrade} =websocket [NC]
+    RewriteRule ^/grafana/(.*) ws://127.0.0.1:3701/grafana/$1 [P,L]
 
     # Grafana
     ProxyPass /grafana/ http://127.0.0.1:3701/grafana/
@@ -342,6 +356,11 @@ If a curl fails, the problem is the container, not Apache: `docker compose ps` a
 If you use nginx instead of Apache, put this in `/etc/nginx/conf.d/metrics.conf`:
 
 ```nginx
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
 server {
     listen 443 ssl;
     server_name metrics.example.com;
@@ -351,6 +370,10 @@ server {
 
     location /grafana/ {
         proxy_pass http://127.0.0.1:3701/grafana/;
+        # Grafana Live (websockets)
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
