@@ -4,6 +4,7 @@ import os
 import json
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 import threading
+import landing
 
 class Logger:
     _configured = False
@@ -67,7 +68,12 @@ class Logger:
 
             def do_GET(self):
                 path = self.path.split('?', 1)[0].rstrip('/')
-                if path in ('', '/logs'):
+                if path == '':
+                    self.send_response(200)
+                    self.send_header('Content-type', 'text/html')
+                    self.end_headers()
+                    self.wfile.write(landing.render().encode())
+                elif path == '/logs':
                     self.send_response(200)
                     self.send_header('Content-type', 'text/html')
                     self.end_headers()
