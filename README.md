@@ -326,11 +326,13 @@ Access your services:
 
 Check the upstreams directly on the VM before debugging the proxy:
 
+Use GET requests (`-I` sends HEAD, which Prometheus answers with 405):
+
 ```bash
-curl -I http://127.0.0.1:3701/grafana/  # Grafana
-curl -I http://127.0.0.1:9091/          # Prometheus
-curl -I http://127.0.0.1:7001/metrics   # Bot metrics
-curl -I http://127.0.0.1:7002/logs      # Bot logs
+curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' http://127.0.0.1:3701/grafana/  # Grafana
+curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' http://127.0.0.1:9091/          # Prometheus
+curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:7001/metrics                   # Bot metrics
+curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:7002/logs                      # Bot logs
 ```
 
 If a curl fails, the problem is the container, not Apache: `docker compose ps` and `docker compose logs <service>`.
