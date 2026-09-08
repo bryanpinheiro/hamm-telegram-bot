@@ -1,11 +1,15 @@
 import os
+import re
 
 DEFAULT_BOT_USERNAME = "hamm_assets_bot"
 
 
 def render(bot_username: str = None) -> str:
-    username = (bot_username or os.getenv("BOT_USERNAME") or DEFAULT_BOT_USERNAME).lstrip("@")
-    return f"""<!DOCTYPE html>
+    raw = bot_username or os.getenv("BOT_USERNAME") or DEFAULT_BOT_USERNAME
+    username = raw.lstrip("@")
+    if not re.fullmatch(r"[A-Za-z0-9_]{5,32}", username):
+        username = DEFAULT_BOT_USERNAME
+    return f"""<!DOCTYPE html
 <html lang="en">
 <head>
     <meta charset="utf-8">
