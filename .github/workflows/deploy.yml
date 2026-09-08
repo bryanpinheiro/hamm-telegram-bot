@@ -1,0 +1,24 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: Dev
+    steps:
+      - name: Deploy via SSH na Oracle VM
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.ORACLE_HOST }}
+          username: ${{ secrets.ORACLE_USERNAME }}
+          key: ${{ secrets.ORACLE_SSH_KEY }}
+          port: ${{ secrets.ORACLE_SSH_PORT }}
+          script: |
+            cd ~/hamm-telegram-bot
+            git pull origin main
+            docker compose up --build -d
+            docker image prune -f
