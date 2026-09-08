@@ -178,10 +178,7 @@ API_TOKEN=your_telegram_bot_token
 GRAFANA_ADMIN_USER=admin
 GRAFANA_ADMIN_PASSWORD=secure_password
 METRICS_PUBLIC_URL=https://metrics.example.com
-BOT_USERNAME=hamm_assets_bot
 ```
-
-`BOT_USERNAME` is the Telegram handle the landing page button links to (a leading `@` is stripped). `.env` is read at container start, so run `docker compose up -d --build` after changing it.
 
 ## Database
 

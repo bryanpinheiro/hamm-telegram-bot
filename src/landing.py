@@ -1,15 +1,8 @@
-import os
-import re
-
-DEFAULT_BOT_USERNAME = "hamm_assets_bot"
+BOT_USERNAME = "hamm_assets_bot"
 
 
-def render(bot_username: str = None) -> str:
-    raw = bot_username or os.getenv("BOT_USERNAME") or DEFAULT_BOT_USERNAME
-    username = raw.lstrip("@")
-    if not re.fullmatch(r"[A-Za-z0-9_]{5,32}", username):
-        username = DEFAULT_BOT_USERNAME
-    return f"""<!DOCTYPE html
+def render() -> str:
+    return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
@@ -56,8 +49,8 @@ def render(bot_username: str = None) -> str:
     <main class="card">
         <h1>Hamm</h1>
         <p>Track the money you receive and the money you spend, straight from Telegram.</p>
-        <a class="cta" href="https://t.me/{username}">Open in Telegram</a>
-        <span class="handle">@{username}</span>
+        <a class="cta" href="https://t.me/{BOT_USERNAME}">Open in Telegram</a>
+        <span class="handle">@{BOT_USERNAME}</span>
     </main>
 </body>
 </html>
