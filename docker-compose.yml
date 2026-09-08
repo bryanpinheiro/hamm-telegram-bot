@@ -3,8 +3,6 @@ services:
     build: .
     container_name: telegrambot
     restart: unless-stopped
-    environment:
-      - BOT_TOKEN=${BOT_TOKEN}
     volumes:
       - /home/opc/bot-data:/app/data:Z
       - ./logs:/app/logs:Z
