@@ -22,12 +22,14 @@ Hamm is a Telegram bot to help you manage your money by tracking inflow (money r
 ### Setup
 
 1. Clone the repository:
+
 ```bash
-git clone https://github.com/yourusername/hamm-telegram-bot.git
+git clone https://github.com/bryanpinheiro/hamm-telegram-bot.git
 cd hamm-telegram-bot
 ```
 
 2. Create a virtual environment and install dependencies:
+
 ```bash
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
@@ -35,16 +37,19 @@ pip install -r requirements.txt
 ```
 
 3. Create a `.env` file:
+
 ```bash
 cp .env.example .env
 ```
 
 4. Edit `.env` and add your Telegram bot token:
+
 ```
 API_TOKEN=your_telegram_bot_token_here
 ```
 
 5. Run the bot:
+
 ```bash
 cd src
 python main.py
@@ -59,22 +64,23 @@ docker compose up -d
 ```
 
 Access points:
-- Grafana: http://localhost:3701/grafana (admin/admin)
-- Prometheus (direct): http://localhost:9091
-- Prometheus (behind `/prometheus` prefix): http://localhost:9091/prometheus/
-- Bot metrics: http://localhost:7001/metrics
-- Bot logs: http://localhost:7002/logs
+
+- Grafana: <http://localhost:3701/grafana> (admin/admin)
+- Prometheus (direct): <http://localhost:9091>
+- Prometheus (behind `/prometheus` prefix): <http://localhost:9091/prometheus/>
+- Bot metrics: <http://localhost:7001/metrics>
+- Bot logs: <http://localhost:7002/logs>
 
 Grafana and Prometheus are served under `/grafana` and `/prometheus` so the same
-URLs work locally and behind the reverse proxy. Set `METRICS_PUBLIC_URL` in `.env`
-to the public base URL when deploying.
+URLs work locally and behind the reverse proxy. Set `METRICS_PUBLIC_URL` in `.env` to the public base URL when deploying.
 
-## Oracle VM Deployment
+## Oracle Cloud VM Deployment
 
 ### Requirements
 
-- Oracle Cloud VM with Ubuntu
+- Oracle Cloud VM running **Oracle Linux (RHEL-based)**
 - Docker and Docker Compose installed
+- Apache `httpd` installed as the system reverse proxy (ships with the base OS image on Oracle Linux)
 - SSH access to the VM
 - GitHub repository with workflow secrets configured
 
@@ -103,7 +109,7 @@ The deployment uses Docker Compose to orchestrate three main services:
          │ Metrics (internal)
          ▼
 ┌─────────────────┐
-│   Prometheus   │
+│   Prometheus    │
 │  (Container)    │
 │  Port 9090      │
 └────────┬────────┘
@@ -119,12 +125,14 @@ The deployment uses Docker Compose to orchestrate three main services:
 ### Traffic Flow
 
 **Telegram Communication:**
+
 - The bot uses **polling** (not webhooks) to communicate with Telegram
 - Bot actively polls Telegram's servers for updates
 - No incoming traffic required from external sources
 - This simplifies firewall configuration - no need to open ports
 
 **Metrics Flow:**
+
 - Bot exposes Prometheus metrics on port 8000 (container internal)
 - Prometheus scrapes metrics from bot every 15 seconds
 - Grafana queries Prometheus for data visualization
@@ -133,14 +141,15 @@ The deployment uses Docker Compose to orchestrate three main services:
 
 ### Port Bindings
 
-| Service | Container Port | Host Port | Access |
-|---------|---------------|-----------|--------|
-| Bot Metrics | 8000 | 7001 | 127.0.0.1:7001 |
-| Bot Logs | 8001 | 7002 | 127.0.0.1:7002 |
-| Prometheus | 9090 | 9091 | 127.0.0.1:9091 |
-| Grafana | 3000 | 3701 | 127.0.0.1:3701 |
+| Service     | Container Port | Host Port | Access         |
+| ----------- | -------------- | --------- | -------------- |
+| Bot Metrics | 8000           | 7001      | 127.0.0.1:7001 |
+| Bot Logs    | 8001           | 7002      | 127.0.0.1:7002 |
+| Prometheus  | 9090           | 9091      | 127.0.0.1:9091 |
+| Grafana     | 3000           | 3701      | 127.0.0.1:3701 |
 
 All ports are bound to localhost only. Access via SSH tunnel if needed:
+
 ```bash
 ssh -L 3701:localhost:3701 user@your-server
 ssh -L 9091:localhost:9091 user@your-server
@@ -157,6 +166,7 @@ The project uses GitHub Actions for automated deployment:
 4. Cleans up unused Docker images
 
 **Required GitHub Secrets:**
+
 - `ORACLE_HOST` - VM IP address
 - `ORACLE_USERNAME` - SSH username
 - `ORACLE_SSH_KEY` - SSH private key
@@ -166,7 +176,7 @@ The project uses GitHub Actions for automated deployment:
 
 Create `.env` file on the VM:
 
-```bash
+```
 API_TOKEN=your_telegram_bot_token
 GRAFANA_ADMIN_USER=admin
 GRAFANA_ADMIN_PASSWORD=secure_password
@@ -176,6 +186,7 @@ METRICS_PUBLIC_URL=https://metrics.example.com
 ## Database
 
 The bot uses SQLite with explicit SQL queries:
+
 - Direct SQL control for transparency
 - Single connection with `check_same_thread=False` for telebot compatibility (multi-threaded polling)
 - Automatic schema initialization on first run
@@ -188,37 +199,50 @@ The bot uses SQLite with explicit SQL queries:
 ### Prometheus Metrics
 
 The bot exposes the following metrics:
+
 - `bot_inflow_total` - Total inflow transactions
-- `bot_outflow_total` - Total outflow transactions  
+- `bot_outflow_total` - Total outflow transactions
 - `bot_messages_total` - Total messages received
 - `bot_callbacks_total` - Total callback queries received
 
 ### Grafana Setup
 
-1. Access Grafana at http://localhost:3701/grafana
+1. Access Grafana at <http://localhost:3701/grafana>
 2. Login with admin/admin (change password after first login)
-3. Add Prometheus data source: http://prometheus:9090
+3. Add Prometheus data source: <http://prometheus:9090>
 4. Import or create dashboards to visualize metrics
 
-### Subdomain Configuration
+### Subdomain Configuration (Apache on Oracle Linux)
 
-If using a single subdomain (e.g., `metrics.example.com`) with Apache httpd as reverse proxy:
+If using a single subdomain (e.g., `metrics.example.com`) with Apache `httpd` as reverse proxy, on **Oracle Linux / RHEL-based systems**.
+
+> **Note:** Oracle Linux ships `httpd` (not Debian/Ubuntu's `apache2` package), so there is no `a2enmod` tool. Modules are enabled via `LoadModule` lines and, on a standard `httpd` install, the ones needed here (`mod_proxy`, `mod_proxy_http`, `mod_proxy_wstunnel`, `mod_rewrite`) are already compiled in and loaded by default — nothing to enable.
 
 #### 1. Create DNS Record
 
 Add an A record in your domain's DNS settings:
+
 - **Type:** A
 - **Name:** metrics (or your desired subdomain)
 - **Value:** Your Oracle VM public IP address
 - **TTL:** 300 (or default)
 
-#### 2. Enable Apache Proxy Modules
+#### 2. Verify Apache Proxy Modules Are Loaded
 
 ```bash
-sudo a2enmod proxy
-sudo a2enmod proxy_http
-sudo a2enmod proxy_wstunnel  # Grafana Live (websockets)
-sudo a2enmod rewrite
+httpd -M | grep -E 'proxy_module|proxy_http_module|proxy_wstunnel_module|rewrite_module'
+```
+
+You should see all four listed as `(shared)`. If any are missing, find their `LoadModule` line (commented out) under `/etc/httpd/conf.modules.d/` — typically in `00-proxy.conf` or `00-base.conf` — and uncomment it:
+
+```bash
+sudo grep -rn "proxy_module\|proxy_http_module\|proxy_wstunnel_module\|rewrite_module" /etc/httpd/conf.modules.d/
+```
+
+Then reload:
+
+```bash
+sudo apachectl configtest
 sudo systemctl restart httpd
 ```
 
@@ -261,14 +285,23 @@ Set `METRICS_PUBLIC_URL=https://metrics.example.com` in the `.env` file on the V
 </VirtualHost>
 ```
 
-If SELinux is enforcing (default on Oracle Linux), Apache is not allowed to open outbound connections unless:
+SELinux is enforcing by default on Oracle Linux, which blocks Apache from opening outbound connections to the containers unless you allow it:
 
 ```bash
 sudo setsebool -P httpd_can_network_connect 1
 ```
 
-Save to `/etc/httpd/conf.d/metrics.conf` and restart:
+If `firewalld` is active, make sure HTTP/HTTPS are open:
+
 ```bash
+sudo firewall-cmd --permanent --add-service=http --add-service=https
+sudo firewall-cmd --reload
+```
+
+Save the VirtualHost config to `/etc/httpd/conf.d/metrics.conf` (Oracle Linux auto-includes everything in `conf.d/`), test, and restart:
+
+```bash
+sudo apachectl configtest
 sudo systemctl restart httpd
 ```
 
@@ -334,14 +367,13 @@ Certbot will automatically update your VirtualHost configuration to use HTTPS.
 #### 5. Verify Configuration
 
 Access your services:
+
 - `https://metrics.example.com/grafana/` → Grafana dashboard
 - `https://metrics.example.com/prometheus/` → Prometheus UI
 - `https://metrics.example.com/bot-metrics` → Raw bot metrics
 - `https://metrics.example.com/logs` → Bot logs (HTML view)
 
-Check the upstreams directly on the VM before debugging the proxy:
-
-Use GET requests (`-I` sends HEAD, which Prometheus answers with 405):
+Check the upstreams directly on the VM before debugging the proxy. Use GET requests (`-I` sends HEAD, which Prometheus answers with 405):
 
 ```bash
 curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' http://127.0.0.1:3701/grafana/  # Grafana
@@ -351,53 +383,6 @@ curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:7002/logs            
 ```
 
 If a curl fails, the problem is the container, not Apache: `docker compose ps` and `docker compose logs <service>`.
-
-#### Nginx alternative
-
-If you use nginx instead of Apache, put this in `/etc/nginx/conf.d/metrics.conf`:
-
-```nginx
-map $http_upgrade $connection_upgrade {
-    default upgrade;
-    ''      close;
-}
-
-server {
-    listen 443 ssl;
-    server_name metrics.example.com;
-
-    ssl_certificate     /etc/letsencrypt/live/metrics.example.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/metrics.example.com/privkey.pem;
-
-    location /grafana/ {
-        proxy_pass http://127.0.0.1:3701/grafana/;
-        # Grafana Live (websockets)
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection $connection_upgrade;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    location /prometheus/ {
-        proxy_pass http://127.0.0.1:9091/;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    location /bot-metrics {
-        proxy_pass http://127.0.0.1:7001/metrics;
-    }
-
-    location /logs {
-        proxy_pass http://127.0.0.1:7002/logs;
-    }
-}
-```
-
-With SELinux enforcing, also run `sudo setsebool -P httpd_can_network_connect 1`.
 
 ## Project Structure
 
