@@ -346,23 +346,34 @@ After running certbot, it will automatically create an HTTPS VirtualHost on port
 
 #### 4. Enable SSL Certificate (Let's Encrypt)
 
-On Oracle Linux (RHEL-based):
+Assumes `certbot` and `python3-certbot-apache` are already installed on the VM.
 
 ```bash
-# Install EPEL repository
-sudo dnf install -y epel-release
-
-# Install certbot and Apache plugin
-sudo dnf install -y certbot python3-certbot-apache
-
-# Obtain and install certificate
 sudo certbot --apache -d metrics.example.com
+```
 
-# Certificate will be auto-renewed via systemd timer
+Certbot automatically updates the VirtualHost configuration to add the `:443` HTTPS block.
+
+If a certificate already exists for that domain, certbot will ask whether to reinstall the existing one or renew/replace it:
+
+```
+1: Attempt to reinstall this existing certificate
+2: Renew & replace the certificate (may be subject to CA rate limits)
+```
+
+Pick **1** unless the current cert is broken or needs different domains — renewing unnecessarily counts against Let's Encrypt's rate limits (5 certs/week per domain).
+
+Auto-renewal runs via a systemd timer; confirm it's enabled:
+
+```bash
 sudo systemctl enable --now certbot-renew.timer
 ```
 
-Certbot will automatically update your VirtualHost configuration to use HTTPS.
+Test a renewal without actually renewing:
+
+```bash
+sudo certbot renew --dry-run
+```
 
 #### 5. Verify Configuration
 
