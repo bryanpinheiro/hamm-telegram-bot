@@ -60,7 +60,8 @@ docker compose up -d
 
 Access points:
 - Grafana: http://localhost:3701/grafana (admin/admin)
-- Prometheus: http://localhost:9091
+- Prometheus (direct): http://localhost:9091
+- Prometheus (behind `/prometheus` prefix): http://localhost:9091/prometheus/
 - Bot metrics: http://localhost:7001/metrics
 - Bot logs: http://localhost:7002/logs
 
