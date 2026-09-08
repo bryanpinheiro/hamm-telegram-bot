@@ -72,6 +72,7 @@ Access points:
 - Prometheus (behind `/prometheus` prefix): <http://localhost:9091/prometheus/>
 - Bot metrics: <http://localhost:7001/metrics>
 - Bot logs: <http://localhost:7002/logs>
+- Landing page: <http://localhost:7002/>
 
 Grafana and Prometheus are served under `/grafana` and `/prometheus` so the same
 URLs work locally and behind the reverse proxy. Set `METRICS_PUBLIC_URL` in `.env` to the public base URL when deploying.
@@ -177,7 +178,10 @@ API_TOKEN=your_telegram_bot_token
 GRAFANA_ADMIN_USER=admin
 GRAFANA_ADMIN_PASSWORD=secure_password
 METRICS_PUBLIC_URL=https://metrics.example.com
+BOT_USERNAME=hamm_assets_bot
 ```
+
+`BOT_USERNAME` is the Telegram handle the landing page button links to (a leading `@` is stripped). `.env` is read at container start, so run `docker compose up -d --build` after changing it.
 
 ## Database
 
@@ -281,6 +285,10 @@ Create a new file at `/etc/httpd/conf.d/metrics.conf` (Oracle Linux automaticall
     # Bot logs
     ProxyPass /logs http://127.0.0.1:7002/logs
     ProxyPassReverse /logs http://127.0.0.1:7002/logs
+
+    # Landing page (root only, so unknown paths still 404 on Apache)
+    ProxyPassMatch ^/$ http://127.0.0.1:7002/
+    ProxyPassReverse / http://127.0.0.1:7002/
 </VirtualHost>
 ```
 
@@ -322,6 +330,8 @@ sudo certbot --apache -d metrics.example.com
 
 Certbot will edit `/etc/httpd/conf.d/metrics.conf` for you, adding a matching `<VirtualHost *:443>` block with the SSL certificate paths, and reload Apache automatically.
 
+If a `<VirtualHost *:443>` block already exists from an earlier certbot run, certbot leaves its contents alone — copy any proxy directives you changed in step 3 into that block by hand, otherwise they only apply over plain HTTP.
+
 If a certificate already exists for that domain (e.g. you're re-running this), certbot will ask:
 
 ```
@@ -351,6 +361,7 @@ Open these in your browser:
 - `https://metrics.example.com/prometheus/` → Prometheus UI
 - `https://metrics.example.com/bot-metrics` → Raw bot metrics
 - `https://metrics.example.com/logs` → Bot logs (HTML view)
+- `https://metrics.example.com/` → Landing page with the "Open in Telegram" button
 
 If something doesn't load, check the container itself first, directly on the VM, before assuming Apache is the problem (`-I` sends a HEAD request, which Prometheus rejects with 405, so use GET):
 
@@ -359,6 +370,7 @@ curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' http://127.0.0.1:3701/
 curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' http://127.0.0.1:9091/          # Prometheus
 curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:7001/metrics                   # Bot metrics
 curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:7002/logs                      # Bot logs
+curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:7002/                          # Landing page
 ```
 
 If these `curl` commands fail or time out, the problem is the container, not Apache — check with `docker compose ps` and `docker compose logs <service>`. If they succeed but the public URL doesn't work, the problem is in the Apache config, SELinux, or the firewall — revisit steps 3–5.
@@ -371,7 +383,8 @@ hamm-telegram-bot/
 │   ├── main.py           # Application entry point
 │   ├── bot.py            # Bot controller with handlers
 │   ├── repository.py     # Database operations
-│   └── logger.py         # Logging configuration
+│   ├── logger.py         # Logging configuration
+│   └── landing.py        # Root landing page served on the logs port
 ├── Dockerfile            # Container image definition
 ├── docker-compose.yml    # Service orchestration
 ├── prometheus.yml        # Prometheus configuration
