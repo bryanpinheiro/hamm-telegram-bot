@@ -70,6 +70,7 @@ Access points:
 - Prometheus (behind `/prometheus` prefix): <http://localhost:9091/prometheus/>
 - Bot metrics: <http://localhost:7001/metrics>
 - Bot logs: <http://localhost:7002/logs>
+- Landing page: <http://localhost:7002/>
 
 Grafana and Prometheus are served under `/grafana` and `/prometheus` so the same
 URLs work locally and behind the reverse proxy. Set `METRICS_PUBLIC_URL` in `.env` to the public base URL when deploying.
@@ -181,6 +182,7 @@ API_TOKEN=your_telegram_bot_token
 GRAFANA_ADMIN_USER=admin
 GRAFANA_ADMIN_PASSWORD=secure_password
 METRICS_PUBLIC_URL=https://metrics.example.com
+BOT_USERNAME=hamm_assets_bot
 ```
 
 ## Database
@@ -282,6 +284,10 @@ Set `METRICS_PUBLIC_URL=https://metrics.example.com` in the `.env` file on the V
     # Bot logs
     ProxyPass /logs http://127.0.0.1:7002/logs
     ProxyPassReverse /logs http://127.0.0.1:7002/logs
+
+    # Landing page (root only, so unknown paths still 404 on Apache)
+    ProxyPassMatch ^/$ http://127.0.0.1:7002/
+    ProxyPassReverse / http://127.0.0.1:7002/
 </VirtualHost>
 ```
 
@@ -341,6 +347,10 @@ After running certbot, it will automatically create an HTTPS VirtualHost on port
     # Bot logs
     ProxyPass /logs http://127.0.0.1:7002/logs
     ProxyPassReverse /logs http://127.0.0.1:7002/logs
+
+    # Landing page (root only, so unknown paths still 404 on Apache)
+    ProxyPassMatch ^/$ http://127.0.0.1:7002/
+    ProxyPassReverse / http://127.0.0.1:7002/
 </VirtualHost>
 ```
 
@@ -383,6 +393,7 @@ Access your services:
 - `https://metrics.example.com/prometheus/` → Prometheus UI
 - `https://metrics.example.com/bot-metrics` → Raw bot metrics
 - `https://metrics.example.com/logs` → Bot logs (HTML view)
+- `https://metrics.example.com/` → Landing page with the "Open in Telegram" button
 
 Check the upstreams directly on the VM before debugging the proxy. Use GET requests (`-I` sends HEAD, which Prometheus answers with 405):
 
@@ -391,6 +402,7 @@ curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' http://127.0.0.1:3701/
 curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' http://127.0.0.1:9091/          # Prometheus
 curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:7001/metrics                   # Bot metrics
 curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:7002/logs                      # Bot logs
+curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:7002/                          # Landing page
 ```
 
 If a curl fails, the problem is the container, not Apache: `docker compose ps` and `docker compose logs <service>`.
@@ -403,7 +415,8 @@ hamm-telegram-bot/
 │   ├── main.py           # Application entry point
 │   ├── bot.py            # Bot controller with handlers
 │   ├── repository.py     # Database operations
-│   └── logger.py         # Logging configuration
+│   ├── logger.py         # Logging configuration
+│   └── landing.py        # Root landing page served on the logs port
 ├── Dockerfile            # Container image definition
 ├── docker-compose.yml    # Service orchestration
 ├── prometheus.yml        # Prometheus configuration
